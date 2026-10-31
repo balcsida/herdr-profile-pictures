@@ -1,14 +1,16 @@
-// Profile pictures: the Spaces sidebar, with each repo's GitHub or GitLab owner
-// picture in place of the letter avatar (the letter stays where there is none).
+// Profile pictures: the Spaces sidebar, with each repo's GitHub (github.com, Enterprise
+// Cloud and Server) or GitLab owner picture in place of the letter avatar (the letter stays
+// where there is none). A fork shows its upstream's, unless the block's props say
+// { "upstream": false }.
 // Workspace spaces: stable colored avatars, worktrees under their checkout,
 // grouped by machine when more than one is known. After a space's name, the repo
 // its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
 // switch, right-click for its menu, drag to reorder.
 
 import { View, div, svg, image } from "gpui-kit";
-import { parseRemote } from "./remote.js";
+import { parseRemote, realHost, pictureFor } from "./remote.js";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, appHome } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, appHome, props } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -38,17 +40,6 @@ const FALLBACK = 60000;
 // Downloaded pictures; hidden, so writing one doesn't hot-reload the mod.
 const CACHE = "mods/profile-pictures/.cache";
 
-// Where the owner's picture is: GitHub serves it by name; GitLab's API gives the
-// project's own avatar, else its group's or user's. Anything else: none.
-async function avatarUrl({ host, path }) {
-  if (host === "github.com") return `https://github.com/${path.split("/")[0]}.png?size=64`;
-  if (!host.includes("gitlab")) return null;
-  const r = await fetch(`https://${host}/api/v4/projects/${encodeURIComponent(path)}`);
-  if (!r.ok) return null; // private project, or not GitLab after all
-  const p = await r.json();
-  return p.avatar_url || p.namespace?.avatar_url || null;
-}
-
 // What a stored color name looks like on an avatar (the same in every mod
 // that draws space avatars): one strong color per hue, light and dark alike.
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
@@ -64,6 +55,7 @@ export function tone(t, status) {
 
 export default class Spaces extends View {
   init(_props, cx) {
+    this.upstream = props()?.upstream !== false;
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at
     this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
@@ -73,6 +65,7 @@ export default class Spaces extends View {
     this.at = {}; // space -> its where() at the last look
     this.watching = new Set(); // local repos' git folders
     this.pics = {}; // repo -> picture path under the home, null: none
+    this.got = {}; // picture path -> its download (an owner's repos share one)
     // Spaces made while this runs wait (at most a moment) for their git, so a
     // worktree appears under its repo instead of jumping there.
     this.shown = new Set(spaces().map((s) => s.id));
@@ -207,16 +200,35 @@ export default class Spaces extends View {
     try {
       const r = await exec("git", ["remote", "get-url", "origin"], { cwd, on });
       const remote = r.code === 0 ? parseRemote(r.stdout) : null;
-      const url = remote && (await avatarUrl(remote));
-      if (!url) return;
-      const file = `${CACHE}/${`${remote.host}_${remote.path}`.replace(/[^\w.-]+/g, "_")}.png`;
-      const got = await exec("curl", ["-fsSL", "--max-time", "15", "--create-dirs", "-o", `${appHome()}/${file}`, url]);
-      if (got.code !== 0) return;
+      if (!remote) return;
+      // An ssh remote can name a Host alias from ~/.ssh/config (a work account's key).
+      if (!/^https?:/i.test(r.stdout.trim())) {
+        const ssh = await exec("ssh", ["-G", remote.host], { on }).catch(() => null);
+        remote.host = realHost(remote.host, ssh?.stdout);
+      }
+      const pic = await pictureFor(remote, this.upstream, exec);
+      if (!pic) return;
+      const file = `${CACHE}/${pic.id.replace(/[^\w.-]+/g, "_")}.png`;
+      if (!(await (this.got[file] ??= this.download(pic.sources, `${appHome()}/${file}`)))) return;
       this.pics[repo] = file;
       cx.notify();
     } catch {
-      // No network or no curl: the letter stays.
+      // No network, no curl: the letter stays.
     }
+  }
+
+  // The first source that gives an image (a private server's login page is HTML). A gh source
+  // keeps the token inside gh; sh writes its bytes, as exec's output is text.
+  async download(sources, out) {
+    for (const s of sources) {
+      // URLs come from API answers: only web addresses reach curl, and gh only https.
+      if (!(s.gh ? /^https:\/\//i : /^https?:\/\//i).test(s.url)) continue;
+      const r = s.gh
+        ? await exec("sh", ["-c", 'mkdir -p "$(dirname "$2")" && gh api "$1" > "$2" && file -b --mime-type "$2"', "sh", s.url, out])
+        : await exec("curl", ["-fsSL", "--max-time", "15", "--create-dirs", "-o", out, "-w", "%{content_type}", s.url]);
+      if (r.code === 0 && r.stdout.startsWith("image/")) return true;
+    }
+    return false;
   }
 
   watch(repo, cx) {
