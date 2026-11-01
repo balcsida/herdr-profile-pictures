@@ -17,6 +17,9 @@ Server) and GitLab. Forks show the upstream's picture by default.
    ```
 
 3. `herdr-app check ~/.config/herdr-app/mods/profile-pictures`
+4. Show that layout: `herdr-app do layout.switch --name <name>`. If the sidebar
+   still shows letter tiles, `herdr-app status` names the active layout; switch
+   again if it isn't yours.
 
 For GitHub Enterprise, log in with `gh auth login --hostname <host>` so the mod can
 reach private-mode servers.
