@@ -217,21 +217,17 @@ export default class Spaces extends View {
     }
   }
 
-  // The first source that gives an image (a private server's login page is HTML). A gh source
-  // keeps the token inside gh; sh writes its bytes, as exec's output is text.
+  // The first source that gives an image. `file` judges the bytes, not the server's label: a
+  // private server's login page is HTML, and object storage (gitea.com's) labels every avatar
+  // application/octet-stream. A gh source keeps the token inside gh; sh writes the bytes, as
+  // exec's output is text.
   async download(sources, out) {
     for (const s of sources) {
       // URLs come from API answers: only web addresses reach curl, and gh only https.
       if (!(s.gh ? /^https:\/\//i : /^https?:\/\//i).test(s.url)) continue;
-      const r = s.gh
-        ? await exec("sh", ["-c", 'mkdir -p "$(dirname "$2")" && gh api "$1" > "$2" && file -b --mime-type "$2"', "sh", s.url, out])
-        : await exec("curl", ["-fsSL", "--max-time", "15", "--create-dirs", "-o", out, "-w", "%{content_type}", s.url]);
+      const get = s.gh ? 'mkdir -p "$(dirname "$2")" && gh api "$1" > "$2"' : 'curl -fsSL --max-time 15 --create-dirs -o "$2" "$1"';
+      const r = await exec("sh", ["-c", `${get} && file -b --mime-type "$2"`, "sh", s.url, out]);
       if (r.code === 0 && r.stdout.startsWith("image/")) return true;
-      // Object storage (gitea.com's, say) labels every avatar application/octet-stream: ask the bytes.
-      if (!s.gh && r.code === 0 && r.stdout.startsWith("application/octet-stream")) {
-        const f = await exec("file", ["-b", "--mime-type", out]).catch(() => null);
-        if (f?.code === 0 && f.stdout.startsWith("image/")) return true;
-      }
     }
     return false;
   }
