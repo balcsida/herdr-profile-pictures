@@ -2,7 +2,8 @@
 
 A [Herdr](https://herdr.dev) mod: the Spaces sidebar with each repo's owner picture
 in place of the letter tile. It works with github.com, GitHub Enterprise (Cloud and
-Server), GitLab, and Forgejo or Gitea (Codeberg included). Forks show the upstream's
+Server), GitLab, and Forgejo or Gitea (Codeberg included). On GitLab, Forgejo and
+Gitea, a repo with an avatar of its own shows that one. Forks show the upstream's
 picture by default.
 
 ![Before and after](preview.png)
@@ -26,8 +27,8 @@ For GitHub Enterprise, log in with `gh auth login --hostname <host>` so the mod 
 reach private-mode servers.
 
 A Forgejo or Gitea server that answers its API only to signed-in users still shows
-each repo's owner picture. For a fork there to show its upstream's, add the server
-to `~/.netrc` with an access token as the password:
+each repo's owner picture. For a repo there to show its own avatar, and a fork its
+upstream's, add the server to `~/.netrc` with an access token as the password:
 
 ```
 machine git.example.org login <user> password <access token>

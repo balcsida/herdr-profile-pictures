@@ -80,6 +80,18 @@ assert.deepEqual(await pictureFor(codeberg, true, fake(web)), {
   sources: [{ url: "https://codeberg.org/user/avatar/up/64" }, { url: "https://codeberg.org/avatars/up" }],
 });
 assert.equal((await pictureFor(codeberg, false, fake(web))).id, "codeberg.org_me");
+// A repo's own avatar wins over its owner's; a fork shows its upstream repo's, else that repo's owner.
+const repoAvatar = (name) => `https://codeberg.org/repo-avatars/${name}`;
+const withAvatars = {
+  full_name: "me/repo", avatar_url: repoAvatar("mine"), owner: forgejoUser("me"), fork: true,
+  parent: { full_name: "up/repo", avatar_url: repoAvatar("theirs"), owner: forgejoUser("up") },
+};
+web = { "https://codeberg.org/api/v1/repos/me/repo": withAvatars };
+assert.deepEqual(await pictureFor(codeberg, true, fake(web)), { id: "codeberg.org_up/repo", sources: [{ url: repoAvatar("theirs") }] });
+assert.deepEqual(await pictureFor(codeberg, false, fake(web)), { id: "codeberg.org_me/repo", sources: [{ url: repoAvatar("mine") }] });
+web = { "https://codeberg.org/api/v1/repos/me/repo": { ...withAvatars, parent: { ...withAvatars.parent, avatar_url: "" } } };
+assert.equal((await pictureFor(codeberg, true, fake(web))).id, "codeberg.org_up");
+web = { "https://codeberg.org/api/v1/repos/me/repo": forgejoFork };
 // The Forgejo API is asked with the host's ~/.netrc login, if any; the others are not.
 const calls = [];
 const recording = async (cmd, args) => (calls.push([cmd, ...args]), fake(web)(cmd, args));

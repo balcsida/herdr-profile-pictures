@@ -54,12 +54,16 @@ export async function pictureFor({ host, path }, upstream, exec) {
   return forgejoPicture(host, path, upstream, exec);
 }
 
-// Forgejo and Gitea (Codeberg among them): their API has GitHub's owner and parent. Many servers
-// answer it only to a signed-in person, so curl sends the host's ~/.netrc login when there is one.
+// Forgejo and Gitea (Codeberg among them): their API has GitHub's owner and parent, and a repo
+// can have an avatar of its own, which wins over its owner's, as a GitLab project's does. Many
+// servers answer the API only to a signed-in person, so curl sends the host's ~/.netrc login
+// when there is one.
 async function forgejoPicture(host, path, upstream, exec) {
   const repo = await json(exec, `https://${host}/api/v1/repos/${path}`, ["--netrc-optional"]);
   if (repo?.owner?.login) {
-    const owner = (upstream && repo.parent?.owner) || repo.owner;
+    const from = (upstream && repo.parent?.owner && repo.parent) || repo;
+    if (from.avatar_url) return { id: `${host}_${from.full_name}`, sources: [{ url: from.avatar_url }] };
+    const owner = from.owner;
     const sources = [{ url: avatarByName(host, owner.login) }];
     if (owner.avatar_url) sources.push({ url: owner.avatar_url });
     return { id: `${host}_${owner.login}`, sources };
