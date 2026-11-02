@@ -1,7 +1,7 @@
 // Profile pictures: the Spaces sidebar, with each repo's GitHub (github.com, Enterprise
-// Cloud and Server), GitLab, Forgejo or Gitea owner picture in place of the letter avatar (the letter stays
-// where there is none). A fork shows its upstream's, unless the block's props say
-// { "upstream": false }.
+// Cloud and Server), GitLab, Forgejo or Gitea owner picture in place of the letter avatar
+// (the letter stays where there is none). A fork shows its upstream's, unless the block's
+// props say { "upstream": false }.
 // Workspace spaces: stable colored avatars, worktrees under their checkout,
 // grouped by machine when more than one is known. After a space's name, the repo
 // its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
