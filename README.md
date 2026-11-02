@@ -2,7 +2,8 @@
 
 A [Herdr](https://herdr.dev) mod: the Spaces sidebar with each repo's owner picture
 in place of the letter tile. It works with github.com, GitHub Enterprise (Cloud and
-Server) and GitLab. Forks show the upstream's picture by default.
+Server), GitLab, and Forgejo or Gitea (Codeberg included). Forks show the upstream's
+picture by default.
 
 ![Before and after](preview.png)
 
@@ -24,6 +25,14 @@ Server) and GitLab. Forks show the upstream's picture by default.
 For GitHub Enterprise, log in with `gh auth login --hostname <host>` so the mod can
 reach private-mode servers.
 
+A Forgejo or Gitea server that answers its API only to signed-in users still shows
+each repo's owner picture. For a fork there to show its upstream's, add the server
+to `~/.netrc` with an access token as the password:
+
+```
+machine git.example.org login <user> password <access token>
+```
+
 ## Options
 
 To show a fork's own owner instead of its upstream's, give the block props:
@@ -35,13 +44,14 @@ To show a fork's own owner instead of its upstream's, give the block props:
 ## What it reaches
 
 It runs `git` and `ssh -G` to read each repo's `origin`, and `gh`, `curl`, `sh` and
-`file` to look up and download pictures. It calls the GitHub or GitLab API of each
-remote's host. Pictures are cached in `mods/profile-pictures/.cache/`.
+`file` to look up and download pictures. It calls the GitHub, GitLab or Forgejo API
+of each remote's host, and sends a host's `~/.netrc` login only to that host's
+Forgejo API. Pictures are cached in `mods/profile-pictures/.cache/`.
 
 ## Custom images
 
-This mod only shows pictures from GitHub or GitLab. To pick your own image for a
-space, use [herdr-space-avatars](https://github.com/juliorr/herdr-space-avatars):
+This mod only shows pictures from GitHub, GitLab, Forgejo or Gitea. To pick your own
+image for a space, use [herdr-space-avatars](https://github.com/juliorr/herdr-space-avatars):
 right-click a space, **Set icon…**, and paste or drop an image. It also takes a
 per-repo image from a folder. Both mods replace the same Spaces block, so use one
 or the other.

@@ -25,7 +25,8 @@ export function apiBase(host) {
 
 // A repo's picture: { id, sources }, or null. `id` names the cached file. `sources`, tried in
 // order: { url } anyone may download, { url, gh: true } fetched through gh, which adds the
-// person's login for the URL's host. GitHub first (any host whose name doesn't say gitlab), then GitLab.
+// person's login for the URL's host. GitHub first (any host whose name doesn't say gitlab), then
+// GitLab, then Forgejo and Gitea.
 // `upstream`: a fork shows the owner of the repo it was forked from. `exec` runs programs here.
 export async function pictureFor({ host, path }, upstream, exec) {
   if (!host.includes("gitlab")) {
@@ -44,11 +45,32 @@ export async function pictureFor({ host, path }, upstream, exec) {
     if (host === "github.com") return { id: `${host}_${owner}`, sources: [{ url: `https://github.com/${owner}.png?size=64` }] };
   }
   const project = await json(exec, `https://${host}/api/v4/projects/${encodeURIComponent(path)}`);
-  const from = (upstream && project?.forked_from_project) || project;
-  const url = from?.avatar_url || from?.namespace?.avatar_url;
-  // A group's avatar can come as a path on the host.
-  return url ? { id: `${host}_${from.path_with_namespace}`, sources: [{ url: url.startsWith("/") ? `https://${host}${url}` : url }] } : null;
+  if (project || host.includes("gitlab")) {
+    const from = (upstream && project?.forked_from_project) || project;
+    const url = from?.avatar_url || from?.namespace?.avatar_url;
+    // A group's avatar can come as a path on the host.
+    return url ? { id: `${host}_${from.path_with_namespace}`, sources: [{ url: url.startsWith("/") ? `https://${host}${url}` : url }] } : null;
+  }
+  return forgejoPicture(host, path, upstream, exec);
 }
+
+// Forgejo and Gitea (Codeberg among them): their API has GitHub's owner and parent. Many servers
+// answer it only to a signed-in person, so curl sends the host's ~/.netrc login when there is one.
+async function forgejoPicture(host, path, upstream, exec) {
+  const repo = await json(exec, `https://${host}/api/v1/repos/${path}`, ["--netrc-optional"]);
+  if (repo?.owner?.login) {
+    const owner = (upstream && repo.parent?.owner) || repo.owner;
+    const sources = [{ url: avatarByName(host, owner.login) }];
+    if (owner.avatar_url) sources.push({ url: owner.avatar_url });
+    return { id: `${host}_${owner.login}`, sources };
+  }
+  // No answer (a server that wants a login, a private repo): the remote owner's picture by name,
+  // which Forgejo serves to anyone. Another kind of server answers it with no image: the letter stays.
+  const owner = path.split("/")[0];
+  return { id: `${host}_${owner}`, sources: [{ url: avatarByName(host, owner) }] };
+}
+
+const avatarByName = (host, login) => `https://${host}/user/avatar/${encodeURIComponent(login)}/64`;
 
 // gh first: the person's login reaches private repos and private-mode servers.
 async function githubRepo(host, path, exec) {
@@ -61,8 +83,8 @@ async function githubRepo(host, path, exec) {
   return json(exec, `${apiBase(host)}repos/${path}`);
 }
 
-async function json(exec, url) {
-  const r = await exec("curl", ["-fsSL", "--max-time", "15", url]);
+async function json(exec, url, options = []) {
+  const r = await exec("curl", ["-fsSL", "--max-time", "15", ...options, url]);
   try {
     return r.code === 0 ? JSON.parse(r.stdout) : null;
   } catch {

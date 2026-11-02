@@ -65,6 +65,30 @@ web = { "https://gitlab.com/api/v4/projects/me%2Frepo": project };
 assert.deepEqual(await pictureFor({ host: "gitlab.com", path: "me/repo" }, true, fake(web)), { id: "gitlab.com_group/repo", sources: [{ url: "https://gitlab.com/uploads/group.png" }] });
 assert.deepEqual(await pictureFor({ host: "gitlab.com", path: "me/repo" }, false, fake(web)), { id: "gitlab.com_me/repo", sources: [{ url: "https://gitlab.com/me.png" }] });
 
-// Neither GitHub nor GitLab: none.
-assert.equal(await pictureFor({ host: "git.example.org", path: "a/b" }, true, fake({})), null);
+// GitLab that answers without any avatar: none, and no other kind of server is asked.
+assert.equal(await pictureFor({ host: "gitlab.com", path: "me/repo" }, true, fake({ "https://gitlab.com/api/v4/projects/me%2Frepo": { path_with_namespace: "me/repo" } })), null);
+// A private gitlab.com project (no answer): none.
+assert.equal(await pictureFor({ host: "gitlab.com", path: "me/repo" }, true, fake({})), null);
+
+// Forgejo and Gitea: a fork shows its upstream's owner, by name first, then the API's URL.
+const forgejoUser = (login) => ({ login, avatar_url: `https://codeberg.org/avatars/${login}` });
+const forgejoFork = { owner: forgejoUser("me"), fork: true, parent: { owner: forgejoUser("up") } };
+web = { "https://codeberg.org/api/v1/repos/me/repo": forgejoFork };
+const codeberg = { host: "codeberg.org", path: "me/repo" };
+assert.deepEqual(await pictureFor(codeberg, true, fake(web)), {
+  id: "codeberg.org_up",
+  sources: [{ url: "https://codeberg.org/user/avatar/up/64" }, { url: "https://codeberg.org/avatars/up" }],
+});
+assert.equal((await pictureFor(codeberg, false, fake(web))).id, "codeberg.org_me");
+// The Forgejo API is asked with the host's ~/.netrc login, if any; the others are not.
+const calls = [];
+const recording = async (cmd, args) => (calls.push([cmd, ...args]), fake(web)(cmd, args));
+await pictureFor(codeberg, true, recording);
+assert.deepEqual(calls.filter((c) => c.includes("--netrc-optional")).map((c) => c.at(-1)), ["https://codeberg.org/api/v1/repos/me/repo"]);
+// A server whose API wants a login (no answer): the remote owner's picture by name, so a server
+// of another kind just keeps the letter when that address gives no image.
+assert.deepEqual(await pictureFor({ host: "git.example.org", path: "team/repo" }, true, fake({})), {
+  id: "git.example.org_team",
+  sources: [{ url: "https://git.example.org/user/avatar/team/64" }],
+});
 console.log("ok");
