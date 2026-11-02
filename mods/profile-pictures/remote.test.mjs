@@ -65,8 +65,12 @@ web = { "https://gitlab.com/api/v4/projects/me%2Frepo": project };
 assert.deepEqual(await pictureFor({ host: "gitlab.com", path: "me/repo" }, true, fake(web)), { id: "gitlab.com_group/repo", sources: [{ url: "https://gitlab.com/uploads/group.png" }] });
 assert.deepEqual(await pictureFor({ host: "gitlab.com", path: "me/repo" }, false, fake(web)), { id: "gitlab.com_me/repo", sources: [{ url: "https://gitlab.com/me.png" }] });
 
-// GitLab that answers without any avatar: none, and no other kind of server is asked.
-assert.equal(await pictureFor({ host: "gitlab.com", path: "me/repo" }, true, fake({ "https://gitlab.com/api/v4/projects/me%2Frepo": { path_with_namespace: "me/repo" } })), null);
+// A GitLab whose name doesn't say gitlab, answering without any avatar: none, and Forgejo's API isn't asked.
+const asked = [];
+const selfHosted = fake({ "https://code.example.org/api/v4/projects/me%2Frepo": { path_with_namespace: "me/repo" } });
+const asking = async (cmd, args) => (asked.push(args.at(-1)), selfHosted(cmd, args));
+assert.equal(await pictureFor({ host: "code.example.org", path: "me/repo" }, true, asking), null);
+assert.ok(!asked.some((url) => url.includes("/api/v1/")));
 // A private gitlab.com project (no answer): none.
 assert.equal(await pictureFor({ host: "gitlab.com", path: "me/repo" }, true, fake({})), null);
 
