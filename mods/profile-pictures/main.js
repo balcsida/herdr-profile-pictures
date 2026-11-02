@@ -227,6 +227,11 @@ export default class Spaces extends View {
         ? await exec("sh", ["-c", 'mkdir -p "$(dirname "$2")" && gh api "$1" > "$2" && file -b --mime-type "$2"', "sh", s.url, out])
         : await exec("curl", ["-fsSL", "--max-time", "15", "--create-dirs", "-o", out, "-w", "%{content_type}", s.url]);
       if (r.code === 0 && r.stdout.startsWith("image/")) return true;
+      // Object storage (gitea.com's, say) labels every avatar application/octet-stream: ask the bytes.
+      if (!s.gh && r.code === 0 && r.stdout.startsWith("application/octet-stream")) {
+        const f = await exec("file", ["-b", "--mime-type", out]).catch(() => null);
+        if (f?.code === 0 && f.stdout.startsWith("image/")) return true;
+      }
     }
     return false;
   }
