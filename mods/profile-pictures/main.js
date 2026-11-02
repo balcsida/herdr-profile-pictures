@@ -229,6 +229,8 @@ export default class Spaces extends View {
       const r = await exec("sh", ["-c", `${get} && file -b --mime-type "$2"`, "sh", s.url, out]);
       if (r.code === 0 && r.stdout.startsWith("image/")) return true;
     }
+    // A login page would stay in .cache/, which is never pruned.
+    await exec("rm", ["-f", out]);
     return false;
   }
 
